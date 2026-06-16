@@ -40,8 +40,6 @@ class UniadAgent(autonomous_agent.AutonomousAgent):
         self.pidcontroller = PIDController() 
         self.config_path = path_to_conf_file.split('+')[0]
         self.ckpt_path = path_to_conf_file.split('+')[1]
-        import datetime
-        now = datetime.datetime.now()
         if IS_BENCH2DRIVE:
             self.save_name = path_to_conf_file.split('+')[-1]
         else:
@@ -50,7 +48,6 @@ class UniadAgent(autonomous_agent.AutonomousAgent):
         self.wall_start = time.time()
         self.initialized = False
         cfg = Config.fromfile(self.config_path)
-        cfg.load_from = '/home/hqj/bench2drive-work/Bench2DriveZoo/ckpts/uniad_base_b2d.pth'
         cfg.model['motion_head']['anchor_info_path'] = os.path.join('Bench2DriveZoo',cfg.model['motion_head']['anchor_info_path'])
         if hasattr(cfg, 'plugin'):
             if cfg.plugin:
@@ -67,8 +64,6 @@ class UniadAgent(autonomous_agent.AutonomousAgent):
                     plg_lib = importlib.import_module(_module_path)  
   
         self.model = build_model(cfg.model, train_cfg=cfg.get('train_cfg'), test_cfg=cfg.get('test_cfg'))
-        self.ckpt_path = '/home/hqj/bench2drive-work/Bench2DriveZoo/ckpts/uniad_base_b2d.pth'
-        print(f"Force loading checkpoint from: {self.ckpt_path}")
         checkpoint = load_checkpoint(self.model, self.ckpt_path, map_location='cpu', strict=True)
         self.model.cuda()
         self.model.eval()
@@ -260,13 +255,7 @@ class UniadAgent(autonomous_agent.AutonomousAgent):
                     'reading_frequency': 20,
                     'id': 'SPEED'
                 },
-                {
-                    'type': 'sensor.camera.rgb',
-                    'x': 0.0, 'y': 0.0, 'z': 2.5,
-                    'roll': 0.0, 'pitch': -90.0, 'yaw': 0.0,
-                    'width': 512, 'height': 512, 'fov': 50,
-                    'id': 'bev'
-                },            
+                
             ]
         
         if IS_BENCH2DRIVE:
@@ -322,8 +311,7 @@ class UniadAgent(autonomous_agent.AutonomousAgent):
     def run_step(self, input_data, timestamp):
         if not self.initialized:
             self._init()
-        current_sim_time = timestamp   
-        tick_data = self.tick(input_data)       
+        tick_data = self.tick(input_data)
         results = {}
         results['lidar2img'] = []
         results['lidar2cam'] = []
@@ -389,7 +377,7 @@ class UniadAgent(autonomous_agent.AutonomousAgent):
         steer_traj, throttle_traj, brake_traj, metadata_traj = self.pidcontroller.control_pid(out_truck, tick_data['speed'], local_command_xy)
         if brake_traj < 0.05: brake_traj = 0.0
         if throttle_traj > brake_traj: brake_traj = 0.0
-        if tick_data['speed']>110/3.6:
+        if tick_data['speed']>5:
             throttle_traj = 0
         control = carla.VehicleControl()
         self.pid_metadata = metadata_traj
@@ -409,16 +397,6 @@ class UniadAgent(autonomous_agent.AutonomousAgent):
         if SAVE_PATH is not None and self.step % 1 == 0:
             self.save(tick_data)
         self.prev_control = control
-        
-        hero_speed_kmh = tick_data['speed'] * 3.6 
-        
-        print(
-            f"[主车 UniAD] SimTime: {current_sim_time:.3f}s | "
-            f"Step: {self.step} | "
-            f"Hero(自己)速度: {hero_speed_kmh:.2f} km/h | "
-            f"Command: {tick_data['command_near']}"
-        )
-        
         return control
 
     def save(self, tick_data):
